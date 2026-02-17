@@ -224,6 +224,7 @@ namespace Intersect.Server.Networking.Helpers
 
     public partial class HasteBinClient
     {
+        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
 
         private static HttpClient _httpClient;
 
@@ -249,13 +250,29 @@ namespace Intersect.Server.Networking.Helpers
 
             var postUrl = $"{fullUrl}documents";
 
-            var request = new HttpRequestMessage(HttpMethod.Post, new Uri(postUrl));
+            using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(postUrl));
             request.Content = new StringContent(content);
-            var result = await _httpClient.SendAsync(request);
+            HttpResponseMessage result;
+            using var requestCts = new CancellationTokenSource(RequestTimeout);
+            try
+            {
+                result = await _httpClient.SendAsync(request, requestCts.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return new HasteBinResult
+                {
+                    FullUrl = fullUrl,
+                    IsSuccess = false,
+                    StatusCode = 504,
+                };
+            }
+
+            using var response = result;
 
             if (result.IsSuccessStatusCode)
             {
-                var json = await result.Content.ReadAsStringAsync();
+                var json = await result.Content.ReadAsStringAsync(requestCts.Token).ConfigureAwait(false);
                 var hasteBinResult = JsonConvert.DeserializeObject<HasteBinResult>(json);
 
                 if (hasteBinResult?.Key != null)
@@ -272,7 +289,7 @@ namespace Intersect.Server.Networking.Helpers
             {
                 FullUrl = fullUrl,
                 IsSuccess = false,
-                StatusCode = (int) result.StatusCode
+                StatusCode = (int)result.StatusCode
             };
         }
 
