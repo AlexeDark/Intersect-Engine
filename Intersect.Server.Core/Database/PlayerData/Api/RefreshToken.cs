@@ -86,7 +86,7 @@ public partial class RefreshToken
 
                 if (tokensToRemove.Count > 0)
                 {
-                    _ = RemoveAllAsync(tokensToRemove, cancellationToken);
+                    _ = await RemoveAllAsync(tokensToRemove, cancellationToken).ConfigureAwait(false);
                 }
 
                 _ = _pendingChanges.TryAdd(token.Id, context.Entry(token).State);
@@ -330,13 +330,60 @@ public partial class RefreshToken
 
     public static bool Remove(RefreshToken token) => RemoveAll(new []{ token });
 
-    public static bool RemoveAll(IEnumerable<RefreshToken> tokens) => RemoveAllAsync(tokens.ToList(), default).Result;
+    public static bool RemoveAll(IEnumerable<RefreshToken> tokens)
+    {
+        ArgumentNullException.ThrowIfNull(tokens);
+
+        var unblockedTokens = Array.Empty<RefreshToken>();
+
+        try
+        {
+            unblockedTokens = tokens
+                .Where(token => _pendingChanges.TryAdd(token.Id, EntityState.Deleted))
+                .ToArray();
+
+            if (unblockedTokens.Length < 1)
+            {
+                return false;
+            }
+
+            ApplicationContext.Context.Value?.Logger.LogTrace(
+                "Attempted to remove {TokenCount} tokens but only {UnblockedTokenCount} were available to remove.",
+                tokens.Count(),
+                unblockedTokens.Length
+            );
+
+            using (var context = DbInterface.CreatePlayerContext(readOnly: false))
+            {
+                context.RefreshTokens.RemoveRange(unblockedTokens);
+                _ = context.SaveChanges();
+            }
+
+            return true;
+        }
+        catch (DbUpdateConcurrencyException concurrencyException)
+        {
+            concurrencyException.LogError();
+            return false;
+        }
+        finally
+        {
+            foreach (var token in unblockedTokens)
+            {
+                _ = _pendingChanges.TryRemove(token.Id, out _);
+            }
+        }
+    }
 
     public static async Task<bool> RemoveAllAsync(IList<RefreshToken> tokens, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(tokens);
+
+        var unblockedTokens = Array.Empty<RefreshToken>();
+
         try
         {
-            var unblockedTokens = tokens.Where(token => _pendingChanges.TryAdd(token.Id, EntityState.Deleted)).ToArray();
+            unblockedTokens = tokens.Where(token => _pendingChanges.TryAdd(token.Id, EntityState.Deleted)).ToArray();
 
             if (unblockedTokens.Length < 1)
             {
@@ -351,17 +398,19 @@ public partial class RefreshToken
                 _ = await context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            foreach (var token in unblockedTokens)
-            {
-                _ = _pendingChanges.TryRemove(token.Id, out _);
-            }
-
             return true;
         }
         catch (DbUpdateConcurrencyException concurrencyException)
         {
             concurrencyException.LogError();
             return false;
+        }
+        finally
+        {
+            foreach (var token in unblockedTokens)
+            {
+                _ = _pendingChanges.TryRemove(token.Id, out _);
+            }
         }
     }
 

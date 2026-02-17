@@ -12,36 +12,38 @@ namespace Intersect.Server.Networking.Helpers
     public static partial class NetDebug
     {
 
-        public static void GenerateDebugFile()
+        public static async Task GenerateDebugFileAsync()
         {
-            Console.WriteLine(Strings.NetDebug.PleaseWait);
-            var hasteClient = new HasteBinClient("https://hastebin.com");
-            var sb = new StringBuilder();
-            sb.AppendLine("Intersect Network Diagnostics");
-            sb.AppendLine();
-            var externalIp = string.Empty;
-            var serverAccessible = PortChecker.CanYouSeeMe(Options.Instance.ServerPort, out externalIp);
-            string localIP;
-            using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
+            try
             {
-                socket.Connect("8.8.8.8", 65530);
-                var endPoint = socket.LocalEndPoint as IPEndPoint;
-                localIP = endPoint.Address.ToString();
-            }
-
-            sb.AppendLine("External IP (from AGD): " + externalIp);
-            if (Options.Instance.UPnP && !string.IsNullOrEmpty(UpnP.GetExternalIp()))
-            {
-                sb.AppendLine("Routers IP (from UPnP): " + UpnP.GetExternalIp());
-                if (string.IsNullOrEmpty(externalIp))
+                Console.WriteLine(Strings.NetDebug.PleaseWait);
+                var hasteClient = new HasteBinClient("https://hastebin.com");
+                var sb = new StringBuilder();
+                sb.AppendLine("Intersect Network Diagnostics");
+                sb.AppendLine();
+                var externalIp = string.Empty;
+                var serverAccessible = PortChecker.CanYouSeeMe(Options.Instance.ServerPort, out externalIp);
+                string localIP;
+                using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, 0))
                 {
-                    externalIp = UpnP.GetExternalIp();
+                    socket.Connect("8.8.8.8", 65530);
+                    var endPoint = socket.LocalEndPoint as IPEndPoint;
+                    localIP = endPoint.Address.ToString();
                 }
-            }
 
-            sb.AppendLine("Internal IP: " + localIP);
-            sb.AppendLine("Server Port: " + Options.Instance.ServerPort);
-            sb.AppendLine();
+                sb.AppendLine("External IP (from AGD): " + externalIp);
+                if (Options.Instance.UPnP && !string.IsNullOrEmpty(UpnP.GetExternalIp()))
+                {
+                    sb.AppendLine("Routers IP (from UPnP): " + UpnP.GetExternalIp());
+                    if (string.IsNullOrEmpty(externalIp))
+                    {
+                        externalIp = UpnP.GetExternalIp();
+                    }
+                }
+
+                sb.AppendLine("Internal IP: " + localIP);
+                sb.AppendLine("Server Port: " + Options.Instance.ServerPort);
+                sb.AppendLine();
             // var canConnectVia127 = CheckServerPlayerCount("127.0.0.1", Options.Instance.ServerPort) > -1;
             // sb.AppendLine(
             //     "Server Status (connecting to self via localhost: 127.0.0.1:" +
@@ -83,38 +85,42 @@ namespace Intersect.Server.Networking.Helpers
             //     (canConnectViaExternalIp ? "Online" : "Offline")
             // );
 
-            sb.AppendLine($"Server Status (as seen by AGD): {serverAccessible}");
-            sb.AppendLine();
-            if (Options.Instance.UPnP)
-            {
-                sb.AppendLine("UPnP Log:");
-                sb.AppendLine(UpnP.GetLog());
-            }
-            else
-            {
-                sb.AppendLine("UPnP: Disabled");
-            }
-
-            sb.AppendLine();
-            sb.AppendLine("Trace Route to AGD");
-            foreach (var line in GetTraceRoute("ascensiongamedev.com"))
-            {
-                sb.AppendLine(line.ToString());
-            }
-
-            var result = hasteClient.Post(sb.ToString());
-            result.Wait();
-            if (result.Result.IsSuccess)
-            {
-                Bootstrapper.MainThread.NextAction = () =>
+                sb.AppendLine($"Server Status (as seen by AGD): {serverAccessible}");
+                sb.AppendLine();
+                if (Options.Instance.UPnP)
                 {
-                    Console.WriteLine(Strings.NetDebug.Hastebin.ToString(result.Result.FullUrl));
-                };
+                    sb.AppendLine("UPnP Log:");
+                    sb.AppendLine(UpnP.GetLog());
+                }
+                else
+                {
+                    sb.AppendLine("UPnP: Disabled");
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("Trace Route to AGD");
+                foreach (var line in GetTraceRoute("ascensiongamedev.com"))
+                {
+                    sb.AppendLine(line.ToString());
+                }
+
+                var result = await hasteClient.Post(sb.ToString()).ConfigureAwait(false);
+                if (result.IsSuccess)
+                {
+                    Bootstrapper.MainThread.NextAction = () =>
+                    {
+                        Console.WriteLine(Strings.NetDebug.Hastebin.ToString(result.FullUrl));
+                    };
+                }
+                else
+                {
+                    Console.WriteLine(Strings.NetDebug.SavedToFile);
+                    File.WriteAllText("netdebug.txt", sb.ToString());
+                }
             }
-            else
+            catch (Exception exception)
             {
-                Console.WriteLine(Strings.NetDebug.SavedToFile);
-                File.WriteAllText("netdebug.txt", sb.ToString());
+                Console.WriteLine(exception);
             }
         }
 

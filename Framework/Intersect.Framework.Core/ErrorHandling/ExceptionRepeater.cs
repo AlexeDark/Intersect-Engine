@@ -27,7 +27,7 @@ public sealed partial class ExceptionRepeater
                 _exceptions.Add(exception);
                 if (_delay > 0)
                 {
-                    Task.Delay(_delay).Wait();
+                    Thread.Sleep(_delay);
                 }
             }
         }
@@ -48,7 +48,7 @@ public sealed partial class ExceptionRepeater
                 _exceptions.Add(exception);
                 if (_delay > 0)
                 {
-                    Task.Delay(_delay).Wait();
+                    Thread.Sleep(_delay);
                 }
             }
         }

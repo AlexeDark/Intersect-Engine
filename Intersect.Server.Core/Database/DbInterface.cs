@@ -2107,7 +2107,7 @@ public static partial class DbInterface
                 throw new InvalidOperationException();
             }
 
-            task.Wait();
+            task.GetAwaiter().GetResult();
         }
         catch (Exception exception)
         {

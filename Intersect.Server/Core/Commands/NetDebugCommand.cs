@@ -14,7 +14,7 @@ namespace Intersect.Server.Core.Commands
 
         protected override void HandleValue(ServerContext context, ParserResult result)
         {
-            NetDebug.GenerateDebugFile();
+            _ = Task.Run(NetDebug.GenerateDebugFileAsync);
         }
 
     }

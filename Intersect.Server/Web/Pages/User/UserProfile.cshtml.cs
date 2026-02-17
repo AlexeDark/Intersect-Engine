@@ -19,7 +19,7 @@ public partial class UserProfileModel : PageModel
 
     public Database.PlayerData.User? ViewedUser { get; set; }
 
-    public async void OnGet()
+    public void OnGet()
     {
         ViewedUser = Database.PlayerData.User.Find(Username);
     }

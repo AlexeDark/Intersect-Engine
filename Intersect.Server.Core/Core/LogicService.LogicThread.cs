@@ -14,6 +14,7 @@ using Intersect.Server.Database.PlayerData.Players;
 using Intersect.Utilities;
 using Intersect.Server.Database.PlayerData.Api;
 using Intersect.Server.Core.MapInstancing;
+using Microsoft.Extensions.Logging;
 
 namespace Intersect.Server.Core;
 
@@ -26,6 +27,7 @@ internal sealed partial class LogicService
     {
         private readonly LogicService _logicService;
         private long _nextClearExpiredTokens;
+        private int _isClearingExpiredTokens;
 
         /// <summary>
         /// We lock on this in order to stop maps from entering the update queue. This is only done when the editor is saving/modifying game maps or the map grids are being rebuilt.
@@ -96,13 +98,13 @@ internal sealed partial class LogicService
                     // Cron-clear expired refresh tokens
                     if (startTime > _nextClearExpiredTokens)
                     {
+                        if (Interlocked.Exchange(ref _isClearingExpiredTokens, 1) == 0)
+                        {
+                            _nextClearExpiredTokens = startTime + 60000;
 #pragma warning disable CA2008 // Do not create tasks without passing a TaskScheduler
-                        _ = RefreshToken
-                            .RemoveExpiredAsync(250)
-                            /* Make it speed up the next call if we definitely have more expired tokens */
-                            .ContinueWith(remainingCount => _nextClearExpiredTokens -= remainingCount.Result > 0 ? 60000 : 0, TaskContinuationOptions.RunContinuationsAsynchronously);
+                            _ = Task.Run(ClearExpiredTokensAsync);
 #pragma warning restore CA2008 // Do not create tasks without passing a TaskScheduler
-                        _nextClearExpiredTokens = startTime + 60000;
+                        }
                     }
 
 
@@ -338,6 +340,27 @@ internal sealed partial class LogicService
             finally
             {
                 ServerContext.Instance.RequestShutdown();
+            }
+        }
+
+        private async Task ClearExpiredTokensAsync()
+        {
+            try
+            {
+                var remainingCount = await RefreshToken.RemoveExpiredAsync(250).ConfigureAwait(false);
+                if (remainingCount > 0)
+                {
+                    // Speed up next pass when we know there is more work.
+                    Interlocked.Add(ref _nextClearExpiredTokens, -60000);
+                }
+            }
+            catch (Exception exception)
+            {
+                ApplicationContext.Context.Value?.Logger.LogError(exception, "Failed to clear expired refresh tokens.");
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _isClearingExpiredTokens, 0);
             }
         }
 

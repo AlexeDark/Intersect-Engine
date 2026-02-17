@@ -737,12 +737,12 @@ internal partial class ApiService : ApplicationService<ServerContext, IApiServic
 
     protected override void TaskStart(ServerContext applicationContext)
     {
-        StartAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        Task.Run(() => StartAsync()).GetAwaiter().GetResult();
     }
 
     protected override void TaskStop(ServerContext applicationContext)
     {
-        StopAsync().ConfigureAwait(false).GetAwaiter().GetResult();
+        Task.Run(() => StopAsync()).GetAwaiter().GetResult();
     }
 
     public ApiConfiguration Configuration =>
