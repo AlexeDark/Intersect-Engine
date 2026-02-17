@@ -311,7 +311,7 @@ public abstract partial class ApplicationContext<TContext, TStartupOptions> : IA
     /// <param name="join">optionally join the current thread, default false</param>
     public void RequestShutdown(bool join = false)
     {
-        Task disposeTask;
+        Thread? disposeThread = default;
 
         lock (_disposeLock)
         {
@@ -321,7 +321,7 @@ public abstract partial class ApplicationContext<TContext, TStartupOptions> : IA
             }
 
             IsShutdownRequested = true;
-            disposeTask = new Task(
+            disposeThread = new Thread(
                 () =>
                 {
                     Dispose();
@@ -331,14 +331,18 @@ public abstract partial class ApplicationContext<TContext, TStartupOptions> : IA
                         Monitor.PulseAll(_shutdownLock);
                     }
                 }
-            );
+            )
+            {
+                IsBackground = true,
+                Name = $"{Name} Shutdown",
+            };
 
-            disposeTask.Start();
+            disposeThread.Start();
         }
 
         if (join)
         {
-            disposeTask.Wait();
+            disposeThread?.Join();
         }
     }
 

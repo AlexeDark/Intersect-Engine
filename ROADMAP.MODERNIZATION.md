@@ -14,6 +14,13 @@ Bring runtime quality to a "production-grade modern .NET" baseline:
 - Ensure cancellation token propagation for I/O operations.
 - Add timeouts for outbound network calls.
 
+Progress (updated 2026-02-17):
+- [x] Removed sync-over-async from key server hot paths (`FullServerContext`, `ApiService`, `DbInterface`, embedded resource unpacking).
+- [x] Reduced fire-and-forget risk in hot paths (`LogAndDisconnect` callers, logic token cleanup, net debug command path).
+- [x] Added outbound timeout for network diagnostics upload (`HasteBinClient` request timeout).
+- [x] Removed shutdown lifecycle `Task.Wait()` usage in application context (`RequestShutdown` now thread-join based).
+- [ ] Remaining Phase 1 focus: finish audit of runtime sync-over-async outside server/data hot paths and close remaining high-impact untracked background operations.
+
 Exit Criteria:
 - No sync-over-async in runtime paths.
 - No non-event-handler `async void`.
