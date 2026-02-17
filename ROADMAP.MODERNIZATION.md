@@ -39,6 +39,7 @@ Exit Criteria:
 Progress (updated 2026-02-17):
 - [x] Introduced bounded channel-based worker for net diagnostics generation (`NetDebug`) to replace direct ad-hoc fire-and-forget command execution.
 - [x] Added explicit worker ownership and shutdown cancellation path for `NetDebug` queue processor.
+- [x] Added lifecycle-managed cancellation for periodic refresh-token cleanup in logic thread (`ClearExpiredTokensAsync` now token-aware and shutdown-cancelled).
 - [ ] Continue migrating high-traffic ad-hoc queues (logic/network/update pipelines) to bounded, lifecycle-managed workers.
 
 Exit Criteria:

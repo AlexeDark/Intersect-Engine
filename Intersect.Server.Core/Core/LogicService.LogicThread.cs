@@ -28,6 +28,8 @@ internal sealed partial class LogicService
         private readonly LogicService _logicService;
         private long _nextClearExpiredTokens;
         private int _isClearingExpiredTokens;
+        private readonly CancellationTokenSource _expiredTokenCleanupCts = new();
+        private Task? _expiredTokenCleanupTask;
 
         /// <summary>
         /// We lock on this in order to stop maps from entering the update queue. This is only done when the editor is saving/modifying game maps or the map grids are being rebuilt.
@@ -101,7 +103,7 @@ internal sealed partial class LogicService
                         if (Interlocked.Exchange(ref _isClearingExpiredTokens, 1) == 0)
                         {
                             _nextClearExpiredTokens = startTime + 60000;
-                            _ = ClearExpiredTokensAsync();
+                            _expiredTokenCleanupTask = ClearExpiredTokensAsync(_expiredTokenCleanupCts.Token);
                         }
                     }
 
@@ -337,20 +339,30 @@ internal sealed partial class LogicService
             }
             finally
             {
+                _expiredTokenCleanupCts.Cancel();
+                if (_expiredTokenCleanupTask is { IsCompleted: false })
+                {
+                    ApplicationContext.Context.Value?.Logger.LogDebug("Refresh token cleanup canceled during shutdown.");
+                }
+                _expiredTokenCleanupCts.Dispose();
                 ServerContext.Instance.RequestShutdown();
             }
         }
 
-        private async Task ClearExpiredTokensAsync()
+        private async Task ClearExpiredTokensAsync(CancellationToken cancellationToken)
         {
             try
             {
-                var remainingCount = await RefreshToken.RemoveExpiredAsync(250).ConfigureAwait(false);
+                var remainingCount = await RefreshToken.RemoveExpiredAsync(250, cancellationToken).ConfigureAwait(false);
                 if (remainingCount > 0)
                 {
                     // Speed up next pass when we know there is more work.
                     Interlocked.Add(ref _nextClearExpiredTokens, -60000);
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Shutdown cancellation.
             }
             catch (Exception exception)
             {
