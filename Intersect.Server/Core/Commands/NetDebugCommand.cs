@@ -14,7 +14,10 @@ namespace Intersect.Server.Core.Commands
 
         protected override void HandleValue(ServerContext context, ParserResult result)
         {
-            _ = NetDebug.GenerateDebugFileAsync();
+            if (!NetDebug.QueueGenerateDebugFile())
+            {
+                Console.WriteLine(Strings.NetDebug.PleaseWait);
+            }
         }
 
     }

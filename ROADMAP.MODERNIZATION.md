@@ -36,6 +36,11 @@ Exit Criteria:
 - Separate CPU-bound and I/O-bound workloads.
 - Standardize retry/backoff and circuit-breaker behavior for external calls.
 
+Progress (updated 2026-02-17):
+- [x] Introduced bounded channel-based worker for net diagnostics generation (`NetDebug`) to replace direct ad-hoc fire-and-forget command execution.
+- [x] Added explicit worker ownership and shutdown cancellation path for `NetDebug` queue processor.
+- [ ] Continue migrating high-traffic ad-hoc queues (logic/network/update pipelines) to bounded, lifecycle-managed workers.
+
 Exit Criteria:
 - Worker model documented per subsystem (network, DB, logic, updater).
 - Queue depth and worker throughput observable.

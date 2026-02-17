@@ -2,6 +2,8 @@
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Channels;
+using Intersect.Core;
 using Intersect.Server.Core;
 using Intersect.Server.Localization;
 using Newtonsoft.Json;
@@ -11,6 +13,78 @@ namespace Intersect.Server.Networking.Helpers
 
     public static partial class NetDebug
     {
+        private static readonly Channel<bool> RequestQueue = Channel.CreateBounded<bool>(
+            new BoundedChannelOptions(1)
+            {
+                FullMode = BoundedChannelFullMode.DropWrite,
+                SingleReader = true,
+                SingleWriter = false,
+            }
+        );
+
+        private static readonly object WorkerLock = new();
+        private static readonly CancellationTokenSource WorkerCts = new();
+        private static Task? _workerTask;
+
+        static NetDebug()
+        {
+            AppDomain.CurrentDomain.ProcessExit += (_, _) => StopWorker();
+        }
+
+        public static bool QueueGenerateDebugFile()
+        {
+            EnsureWorkerStarted();
+            return RequestQueue.Writer.TryWrite(true);
+        }
+
+        private static void EnsureWorkerStarted()
+        {
+            if (_workerTask != default)
+            {
+                return;
+            }
+
+            lock (WorkerLock)
+            {
+                _workerTask ??= ProcessQueueAsync(WorkerCts.Token);
+            }
+        }
+
+        private static async Task ProcessQueueAsync(CancellationToken cancellationToken)
+        {
+            try
+            {
+                while (await RequestQueue.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    while (RequestQueue.Reader.TryRead(out _))
+                    {
+                        try
+                        {
+                            await GenerateDebugFileAsync().ConfigureAwait(false);
+                        }
+                        catch (Exception exception)
+                        {
+                            ApplicationContext.Context.Value?.Logger.LogError(exception, "Failed generating net debug output.");
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Graceful shutdown.
+            }
+        }
+
+        private static void StopWorker()
+        {
+            if (WorkerCts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            WorkerCts.Cancel();
+            RequestQueue.Writer.TryComplete();
+        }
 
         public static async Task GenerateDebugFileAsync()
         {
