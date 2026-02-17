@@ -656,7 +656,7 @@ public partial class Player : Entity
                     ApplicationContext.Context.Value?.Logger.LogWarning($"Save failed for logout {logoutOperationId}");
                     break;
                 case UserSaveResult.DatabaseFailure:
-                    _ = Client?.LogAndDisconnect(Id, stackTrace ?? nameof(CompleteLogout));
+                    Client?.QueueLogAndDisconnect(Id, stackTrace ?? nameof(CompleteLogout));
                     break;
                 case null:
                     ApplicationContext.Context.Value?.Logger.LogWarning($"Skipped save because {nameof(User)} is null.");
@@ -7742,7 +7742,7 @@ public partial class Player : Entity
         Name = newName;
         if (User?.Save() == UserSaveResult.DatabaseFailure)
         {
-            _ = Client?.LogAndDisconnect(Id, nameof(TryChangeName));
+            Client?.QueueLogAndDisconnect(Id, nameof(TryChangeName));
             return false;
         }
 

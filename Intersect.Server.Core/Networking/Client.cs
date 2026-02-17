@@ -30,6 +30,8 @@ public partial class Client : IPacketSender
     public Guid EditorMap = Guid.Empty;
 
     private bool _crashing;
+    private readonly object _logAndDisconnectLock = new();
+    private Task? _logAndDisconnectTask;
 
     //Client Properties
     public bool IsEditor;
@@ -278,7 +280,7 @@ public partial class Client : IPacketSender
         {
             if (User?.Save() == UserSaveResult.DatabaseFailure)
             {
-                _ = LogAndDisconnect(Entity?.Id ?? default, nameof(Logout));
+                QueueLogAndDisconnect(Entity?.Id ?? default, nameof(Logout));
                 return;
             }
         }
@@ -490,7 +492,20 @@ public partial class Client : IPacketSender
         }
     }
 
-    public async Task LogAndDisconnect(Guid? playerId, string? meta = default)
+    public void QueueLogAndDisconnect(Guid? playerId, string? meta = default)
+    {
+        lock (_logAndDisconnectLock)
+        {
+            if (_logAndDisconnectTask is { IsCompleted: false })
+            {
+                return;
+            }
+
+            _logAndDisconnectTask = LogAndDisconnectAsync(playerId, meta);
+        }
+    }
+
+    private async Task LogAndDisconnectAsync(Guid? playerId, string? meta = default)
     {
         _crashing = true;
         HandlePacketQueue.Clear();
@@ -518,7 +533,14 @@ public partial class Client : IPacketSender
             ApplicationContext.Logger.LogError(exception, "Failed to log disconnect activity for {UserId}", User?.Id);
         }
 
-        Disconnect(message ?? Strings.Networking.ServerFull, loggingOut: true);
+        try
+        {
+            Disconnect(message ?? Strings.Networking.ServerFull, loggingOut: true);
+        }
+        catch (Exception exception)
+        {
+            ApplicationContext.Logger.LogError(exception, "Failed to disconnect crashing client {UserId}", User?.Id);
+        }
     }
 
     #region Implementation of IPacketSender

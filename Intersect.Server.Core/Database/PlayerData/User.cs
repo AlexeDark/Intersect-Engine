@@ -202,7 +202,7 @@ public partial class User
         }
 
         var client = Client.LookupByConnectionId.Values.FirstOrDefault(c => c.User.Id == Id);
-        _ = client?.LogAndDisconnect(default, nameof(TrySetPassword));
+        client?.QueueLogAndDisconnect(default, nameof(TrySetPassword));
         return false;
     }
 
@@ -327,7 +327,7 @@ public partial class User
         }
 
         var client = Client.LookupByConnectionId.Values.FirstOrDefault(c => c.User.Id == Id);
-        _ = client?.LogAndDisconnect(default, nameof(SaveWithDebounce));
+        client?.QueueLogAndDisconnect(default, nameof(SaveWithDebounce));
     }
 
     public UserSaveResult Save(bool force) => Save(force: force, create: false);
@@ -445,7 +445,7 @@ public partial class User
 #endif
 
             var client = Client.LookupByConnectionId.Values.FirstOrDefault(c => c.User.Id == Id);
-            _ = client?.LogAndDisconnect(default, "User.Save");
+            client?.QueueLogAndDisconnect(default, "User.Save");
 
             return UserSaveResult.DatabaseFailure;
         }
@@ -487,7 +487,7 @@ public partial class User
 #endif
 
             var client = Client.LookupByConnectionId.Values.FirstOrDefault(c => c.User.Id == Id);
-            _ = client?.LogAndDisconnect(default, "User.Save");
+            client?.QueueLogAndDisconnect(default, "User.Save");
 
             if (Options.Instance.PlayerDatabase.KillServerOnConcurrencyException)
             {
@@ -507,7 +507,7 @@ public partial class User
 #endif
 
             var client = Client.LookupByConnectionId.Values.FirstOrDefault(c => c.User.Id == Id);
-            _ = client?.LogAndDisconnect(default, "User.Save");
+            client?.QueueLogAndDisconnect(default, "User.Save");
 
             if (Options.Instance.PlayerDatabase.KillServerOnConcurrencyException)
             {
@@ -995,7 +995,7 @@ public partial class User
             if (Save() == UserSaveResult.DatabaseFailure)
             {
                 var client = Client.LookupByConnectionId.Values.FirstOrDefault(c => c.User.Id == Id);
-                _ = client?.LogAndDisconnect(default, "User.Save");
+                client?.QueueLogAndDisconnect(default, "User.Save");
             }
 
             UpdatedVariables.Clear();

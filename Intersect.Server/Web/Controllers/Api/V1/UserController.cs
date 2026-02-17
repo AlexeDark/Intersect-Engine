@@ -147,7 +147,7 @@ namespace Intersect.Server.Web.Controllers.Api.V1
             if (!user.TryDelete())
             {
                 var client = Client.LookupByConnectionId.Values.FirstOrDefault(c => c.User.Id == user.Id);
-                _ = client?.LogAndDisconnect(default, nameof(DeleteUser));
+                client?.QueueLogAndDisconnect(default, nameof(DeleteUser));
             }
 
             return Ok(user);

@@ -41,6 +41,7 @@ Progress (updated 2026-02-17):
 - [x] Added explicit worker ownership and shutdown cancellation path for `NetDebug` queue processor.
 - [x] Added lifecycle-managed cancellation for periodic refresh-token cleanup in logic thread (`ClearExpiredTokensAsync` now token-aware and shutdown-cancelled).
 - [x] Replaced API host dedicated thread with lifecycle-managed `Task` execution (`RunAsync` + cancellation + bounded stop wait).
+- [x] Removed hot-path fire-and-forget disconnect logging calls by introducing supervised per-client queueing (`QueueLogAndDisconnect`).
 - [ ] Continue migrating high-traffic ad-hoc queues (logic/network/update pipelines) to bounded, lifecycle-managed workers.
 
 Exit Criteria:

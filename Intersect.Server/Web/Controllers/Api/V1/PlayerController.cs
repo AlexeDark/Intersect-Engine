@@ -215,7 +215,7 @@ namespace Intersect.Server.Web.Controllers.Api.V1
             var matchingPlayer = user.Players.FirstOrDefault(p => p.Id == player.Id);
             if (matchingPlayer != default && !user.TryDeleteCharacter(matchingPlayer) && client.User == user)
             {
-                _ = client.LogAndDisconnect(player.Id, nameof(Database.PlayerData.User.TryDeleteCharacter));
+                client.QueueLogAndDisconnect(player.Id, nameof(Database.PlayerData.User.TryDeleteCharacter));
             }
 
             return Ok(player);
