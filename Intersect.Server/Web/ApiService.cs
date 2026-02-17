@@ -53,7 +53,10 @@ internal partial class ApiService : ApplicationService<ServerContext, IApiServic
     private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(30);
 
     private WebApplication? _app;
-    private Thread? _hostThread;
+    private Task? _hostTask;
+    private CancellationTokenSource? _hostCts;
+    private ManualResetEventSlim? _hostStoppedSignal;
+    private Exception? _hostException;
     private static readonly Assembly Assembly = typeof(ApiService).Assembly;
 
     private static string GetOptionsName<TOptions>() => typeof(TOptions).Name.Replace("Options", string.Empty);
@@ -720,49 +723,42 @@ internal partial class ApiService : ApplicationService<ServerContext, IApiServic
         }
 
         var startedSignal = new ManualResetEventSlim(false);
-        Exception? startException = default;
         using var applicationStartedRegistration = app.Lifetime.ApplicationStarted.Register(startedSignal.Set);
 
         _app = app;
-        _hostThread = new Thread(
-            () =>
-            {
-                try
-                {
-                    app.Run();
-                }
-                catch (Exception exception)
-                {
-                    startException = exception;
-                    ApplicationContext.Context.Value?.Logger.LogError(exception, "Error starting API service");
-                    startedSignal.Set();
-                }
-            }
-        )
-        {
-            IsBackground = true,
-            Name = nameof(ApiService),
-        };
-
-        _hostThread.Start();
+        _hostException = default;
+        _hostStoppedSignal = new ManualResetEventSlim(false);
+        _hostCts = new CancellationTokenSource();
+        _hostTask = RunHostAsync(app, _hostCts.Token, _hostStoppedSignal, startedSignal);
         if (!startedSignal.Wait(StartTimeout))
         {
             app.Lifetime.StopApplication();
+            _hostCts.Cancel();
+            _hostStoppedSignal.Wait(StopTimeout);
+            _hostStoppedSignal.Dispose();
+            _hostStoppedSignal = default;
+            _hostCts.Dispose();
+            _hostCts = default;
+            _hostTask = default;
             throw new TimeoutException($"Timed out starting API service after {StartTimeout.TotalSeconds:0} seconds.");
         }
 
-        if (startException != default)
+        if (_hostException != default)
         {
-            throw new InvalidOperationException("API service failed to start.", startException);
+            throw new InvalidOperationException("API service failed to start.", _hostException);
         }
     }
 
     protected override void TaskStop(ServerContext applicationContext)
     {
         var app = _app;
-        var hostThread = _hostThread;
+        var hostStoppedSignal = _hostStoppedSignal;
+        var hostCts = _hostCts;
         _app = default;
-        _hostThread = default;
+        _hostTask = default;
+        _hostCts = default;
+        _hostStoppedSignal = default;
+        _hostException = default;
 
         if (app == default)
         {
@@ -772,18 +768,51 @@ internal partial class ApiService : ApplicationService<ServerContext, IApiServic
         try
         {
             app.Lifetime.StopApplication();
+            hostCts?.Cancel();
         }
         catch (Exception exception)
         {
             ApplicationContext.Context.Value?.Logger.LogError(exception, "Error stopping API service");
         }
+        finally
+        {
+            hostCts?.Dispose();
+        }
 
-        if ((hostThread?.IsAlive ?? false) && !hostThread.Join(StopTimeout))
+        if (hostStoppedSignal != default && !hostStoppedSignal.Wait(StopTimeout))
         {
             ApplicationContext.Context.Value?.Logger.LogWarning(
                 "Timed out waiting for API service to stop after {TimeoutSeconds} seconds.",
                 StopTimeout.TotalSeconds
             );
+        }
+        hostStoppedSignal?.Dispose();
+    }
+
+    private async Task RunHostAsync(
+        WebApplication app,
+        CancellationToken cancellationToken,
+        ManualResetEventSlim stopSignal,
+        ManualResetEventSlim startSignal
+    )
+    {
+        try
+        {
+            await app.RunAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Shutdown cancellation.
+        }
+        catch (Exception exception)
+        {
+            _hostException = exception;
+            ApplicationContext.Context.Value?.Logger.LogError(exception, "Error starting API service");
+        }
+        finally
+        {
+            startSignal.Set();
+            stopSignal.Set();
         }
 
     }
