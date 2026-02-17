@@ -185,27 +185,49 @@ public static partial class AssemblyExtensions
     }
 
     public static void UnpackEmbeddedFile(this Assembly assembly, string resourceName, bool overwrite = false) =>
-        UnpackEmbeddedFileAsync(
-                assembly: assembly,
-                cancellationToken: CancellationToken.None,
-                resourceName: resourceName,
-                overwrite: overwrite
-            )
-            .Wait();
+        UnpackEmbeddedFile(
+            assembly,
+            resourceName,
+            new FileInfo(resourceName),
+            overwrite
+        );
 
     public static void UnpackEmbeddedFile(
         this Assembly assembly,
         string resourceName,
         FileInfo fileInfo,
         bool overwrite = false
-    ) => UnpackEmbeddedFileAsync(
-            assembly: assembly,
-            cancellationToken: CancellationToken.None,
-            resourceName: resourceName,
-            fileInfo: fileInfo,
-            overwrite: overwrite
-        )
-        .Wait();
+    )
+    {
+        if (!overwrite && fileInfo.Exists)
+        {
+            return;
+        }
+
+        if (!assembly.TryFindResource(resourceName, out var manifestResourceName))
+        {
+            throw new MissingManifestResourceException(
+                string.Format(ReflectionStrings.UnpackEmbeddedFile_MissingManifestResourceInfo, resourceName)
+            );
+        }
+
+        using var manifestResourceStream = assembly.GetManifestResourceStream(manifestResourceName);
+        if (manifestResourceStream == default)
+        {
+            throw new MissingManifestResourceException(
+                string.Format(ReflectionStrings.UnpackEmbeddedFile_UnableToOpenStream, manifestResourceName)
+            );
+        }
+
+        var directoryInfo = fileInfo.Directory;
+        if (!(directoryInfo?.Exists ?? true))
+        {
+            directoryInfo.Create();
+        }
+
+        using var fileStream = fileInfo.OpenWrite();
+        manifestResourceStream.CopyTo(fileStream);
+    }
 
     public static Task UnpackEmbeddedFileAsync(
         this Assembly assembly,
