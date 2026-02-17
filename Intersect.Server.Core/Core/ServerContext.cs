@@ -274,9 +274,7 @@ internal partial class ServerContext : ApplicationContext<ServerContext, ServerC
     internal static void DispatchUnhandledException(Exception exception, bool isTerminating = true)
     {
         var sender = Thread.CurrentThread;
-        Task.Factory.StartNew(
-            () => HandleUnhandledException(sender, new UnhandledExceptionEventArgs(exception, isTerminating))
-        );
+        HandleUnhandledException(sender, new UnhandledExceptionEventArgs(exception, isTerminating));
     }
 
     #endregion Exception Handling

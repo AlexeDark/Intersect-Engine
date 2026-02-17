@@ -22,19 +22,19 @@ public sealed class BootstrapperService : IBootstrapperService
         _serviceProvider = serviceProvider;
     }
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         _cancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var bootstrapTasks = _serviceProvider.GetServices<IBootstrapTask>();
-        return Task.WhenAll(bootstrapTasks.Select(task => task.ExecuteAsync(_cancellationTokenSource.Token)))
-            .ContinueWith(
-                _ =>
-                {
-                    _applicationLifetime.StopApplication();
-                    return Task.CompletedTask;
-                },
-                _cancellationTokenSource.Token
-            );
+
+        try
+        {
+            await Task.WhenAll(bootstrapTasks.Select(task => task.ExecuteAsync(_cancellationTokenSource.Token)));
+        }
+        finally
+        {
+            _applicationLifetime.StopApplication();
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

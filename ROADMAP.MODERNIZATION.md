@@ -7,7 +7,7 @@ Bring runtime quality to a "production-grade modern .NET" baseline:
 - measurable performance and reliability,
 - safer code evolution with analyzers and tests.
 
-## Phase 1: Async Safety and Reliability (Now)
+## Phase 1: Async Safety and Reliability (Completed 2026-02-17)
 - Remove `async void` in non-UI flows.
 - Remove `.Result`, `.Wait()`, and `GetAwaiter().GetResult()` from server/web/data hot paths.
 - Replace fire-and-forget tasks with tracked background execution.
@@ -19,7 +19,11 @@ Progress (updated 2026-02-17):
 - [x] Reduced fire-and-forget risk in hot paths (`LogAndDisconnect` callers, logic token cleanup, net debug command path).
 - [x] Added outbound timeout for network diagnostics upload (`HasteBinClient` request timeout).
 - [x] Removed shutdown lifecycle `Task.Wait()` usage in application context (`RequestShutdown` now thread-join based).
-- [ ] Remaining Phase 1 focus: finish audit of runtime sync-over-async outside server/data hot paths and close remaining high-impact untracked background operations.
+- [x] Removed unsupervised exception-dispatch task scheduling (`ServerContext.DispatchUnhandledException` now direct dispatch).
+- [x] Replaced bootstrap `ContinueWith` chain with explicit `async/await` lifecycle flow (`BootstrapperService.StartAsync`).
+- [x] Audit result: no `GetAwaiter().GetResult()`, `Task.Wait()`, or `Task.Result` remaining in server/core/framework runtime paths.
+- [x] Audit result: no non-event-handler `async void` in server/core/framework runtime projects.
+- [x] Validation: `dotnet test Intersect.Tests.Server/Intersect.Tests.Server.csproj -c Debug` passed (44/44).
 
 Exit Criteria:
 - No sync-over-async in runtime paths.
