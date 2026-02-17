@@ -101,9 +101,7 @@ internal sealed partial class LogicService
                         if (Interlocked.Exchange(ref _isClearingExpiredTokens, 1) == 0)
                         {
                             _nextClearExpiredTokens = startTime + 60000;
-#pragma warning disable CA2008 // Do not create tasks without passing a TaskScheduler
-                            _ = Task.Run(ClearExpiredTokensAsync);
-#pragma warning restore CA2008 // Do not create tasks without passing a TaskScheduler
+                            _ = ClearExpiredTokensAsync();
                         }
                     }
 
