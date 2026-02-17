@@ -173,11 +173,29 @@ internal class FullServerContext : ServerContext, IFullServerContext
 
         private bool TryUPnP()
         {
-            UpnP.ConnectNatDevice().Wait(5000);
+            if (!WaitForOperation(UpnP.ConnectNatDevice(), TimeSpan.FromSeconds(5), "connect to UPnP device"))
+            {
+                return false;
+            }
+
 #if WEBSOCKETS
-            UpnP.OpenServerPort(Options.Instance.ServerPort, Protocol.Tcp).Wait(5000);
+            if (!WaitForOperation(
+                    UpnP.OpenServerPort(Options.Instance.ServerPort, Protocol.Tcp),
+                    TimeSpan.FromSeconds(5),
+                    "forward TCP port over UPnP"
+                ))
+            {
+                return false;
+            }
 #endif
-            UpnP.OpenServerPort(Options.Instance.ServerPort, Protocol.Udp).Wait(5000);
+            if (!WaitForOperation(
+                    UpnP.OpenServerPort(Options.Instance.ServerPort, Protocol.Udp),
+                    TimeSpan.FromSeconds(5),
+                    "forward UDP port over UPnP"
+                ))
+            {
+                return false;
+            }
 
             if (UpnP.ForwardingSucceeded())
             {
@@ -186,6 +204,53 @@ internal class FullServerContext : ServerContext, IFullServerContext
 
             Console.WriteLine(Strings.Portchecking.CheckRouterUpnp);
             return false;
+        }
+
+        private static bool WaitForOperation(Task task, TimeSpan timeout, string operationName)
+        {
+            var waited = 0;
+            const int PollIntervalMs = 25;
+            var timeoutMs = (int)timeout.TotalMilliseconds;
+
+            while (!task.IsCompleted && waited < timeoutMs)
+            {
+                Thread.Sleep(PollIntervalMs);
+                waited += PollIntervalMs;
+            }
+
+            if (!task.IsCompleted)
+            {
+                ApplicationContext.Context.Value?.Logger.LogWarning(
+                    "Timed out while trying to {OperationName}.",
+                    operationName
+                );
+
+                return false;
+            }
+
+            if (task.IsFaulted)
+            {
+                var exception = task.Exception?.GetBaseException() ?? task.Exception;
+                ApplicationContext.Context.Value?.Logger.LogError(
+                    exception,
+                    "Failed while trying to {OperationName}.",
+                    operationName
+                );
+
+                return false;
+            }
+
+            if (task.IsCanceled)
+            {
+                ApplicationContext.Context.Value?.Logger.LogWarning(
+                    "Canceled while trying to {OperationName}.",
+                    operationName
+                );
+
+                return false;
+            }
+
+            return true;
         }
 
         private bool CheckPort()

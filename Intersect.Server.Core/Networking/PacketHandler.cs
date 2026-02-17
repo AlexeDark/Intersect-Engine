@@ -1657,7 +1657,7 @@ internal sealed partial class PacketHandler
 
         if (!client.User.TryAddCharacter(newChar))
         {
-            client.LogAndDisconnect(newChar.Id);
+            _ = client.LogAndDisconnect(newChar.Id);
             return;
         }
 
@@ -2486,7 +2486,7 @@ internal sealed partial class PacketHandler
 
                 if (!Player.TryRemoveFriendship(player.Id, friendId))
                 {
-                    client.LogAndDisconnect(player.Id, nameof(Player.TryRemoveFriendship));
+                    _ = client.LogAndDisconnect(player.Id, nameof(Player.TryRemoveFriendship));
                     return;
                 }
             }
@@ -2650,7 +2650,7 @@ internal sealed partial class PacketHandler
 
                     if (!client.User.TryDeleteCharacter(chr))
                     {
-                        client.LogAndDisconnect(chr.Id, nameof(User.TryDeleteCharacter));
+                        _ = client.LogAndDisconnect(chr.Id, nameof(User.TryDeleteCharacter));
                     }
                 }
             }

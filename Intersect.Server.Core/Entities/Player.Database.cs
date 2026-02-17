@@ -309,7 +309,7 @@ public partial class Player
                 }
             }
 
-            Client.LogAndDisconnect(Id, nameof(TryAddFriend));
+            _ = Client.LogAndDisconnect(Id, nameof(TryAddFriend));
             return false;
         }
         catch (Exception ex)

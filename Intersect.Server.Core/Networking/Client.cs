@@ -278,7 +278,7 @@ public partial class Client : IPacketSender
         {
             if (User?.Save() == UserSaveResult.DatabaseFailure)
             {
-                LogAndDisconnect(Entity?.Id ?? default, nameof(Logout));
+                _ = LogAndDisconnect(Entity?.Id ?? default, nameof(Logout));
                 return;
             }
         }
@@ -495,19 +495,27 @@ public partial class Client : IPacketSender
         _crashing = true;
         HandlePacketQueue.Clear();
 
-        var history = await UserActivityHistory.LogActivityAsync(
-            User?.Id ?? default,
-            playerId ?? Entity?.Id ?? default,
-            Ip,
-            IsEditor ? UserActivityHistory.PeerType.Editor : UserActivityHistory.PeerType.Client,
-            UserActivityHistory.UserAction.DisconnectDatabaseFailure,
-            meta
-        );
-
-        var message = history?.Id.ToString();
-        if (message == default)
+        string? message = default;
+        try
         {
-            ApplicationContext.Logger.LogError($"Failed to record crash for {User?.Id.ToString() ?? "N/A"}");
+            var history = await UserActivityHistory.LogActivityAsync(
+                User?.Id ?? default,
+                playerId ?? Entity?.Id ?? default,
+                Ip,
+                IsEditor ? UserActivityHistory.PeerType.Editor : UserActivityHistory.PeerType.Client,
+                UserActivityHistory.UserAction.DisconnectDatabaseFailure,
+                meta
+            );
+
+            message = history?.Id.ToString();
+            if (message == default)
+            {
+                ApplicationContext.Logger.LogError("Failed to record crash for {UserId}", User?.Id.ToString() ?? "N/A");
+            }
+        }
+        catch (Exception exception)
+        {
+            ApplicationContext.Logger.LogError(exception, "Failed to log disconnect activity for {UserId}", User?.Id);
         }
 
         Disconnect(message ?? Strings.Networking.ServerFull, loggingOut: true);

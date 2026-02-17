@@ -2107,7 +2107,7 @@ public static partial class DbInterface
                 throw new InvalidOperationException();
             }
 
-            task.GetAwaiter().GetResult();
+            WaitForTaskCompletion(task, "database migration");
         }
         catch (Exception exception)
         {
@@ -2117,6 +2117,27 @@ public static partial class DbInterface
                 selectedContextType
             );
             throw;
+        }
+    }
+
+    private static void WaitForTaskCompletion(Task task, string operationName)
+    {
+        while (!task.IsCompleted)
+        {
+            Thread.Sleep(25);
+        }
+
+        if (task.IsFaulted)
+        {
+            throw new InvalidOperationException(
+                $"Failed while waiting for {operationName}.",
+                task.Exception?.GetBaseException() ?? task.Exception
+            );
+        }
+
+        if (task.IsCanceled)
+        {
+            throw new TaskCanceledException($"Canceled while waiting for {operationName}.");
         }
     }
 

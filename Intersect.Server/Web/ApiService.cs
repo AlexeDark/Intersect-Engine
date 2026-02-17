@@ -49,7 +49,11 @@ namespace Intersect.Server.Web;
 internal partial class ApiService : ApplicationService<ServerContext, IApiService, ApiService>, IApiService
 {
     private const string BearerCookieFallbackAuthenticationScheme = "BearerCookieFallback";
+    private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(30);
+
     private WebApplication? _app;
+    private Thread? _hostThread;
     private static readonly Assembly Assembly = typeof(ApiService).Assembly;
 
     private static string GetOptionsName<TOptions>() => typeof(TOptions).Name.Replace("Options", string.Empty);
@@ -705,44 +709,83 @@ internal partial class ApiService : ApplicationService<ServerContext, IApiServic
         return app;
     }
 
-    private async Task StartAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var app = Configure();
-            if (app == default)
-            {
-                return;
-            }
-
-            _app = app;
-            await app.StartAsync(cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            ApplicationContext.Context.Value?.Logger.LogError(exception, "Error starting API service");
-            throw;
-        }
-    }
-
-    private async Task StopAsync(CancellationToken cancellationToken = default)
-    {
-        if (_app != default)
-        {
-            await _app.StopAsync(cancellationToken);
-        }
-    }
-
     public override bool IsEnabled => Configuration.Enabled;
 
     protected override void TaskStart(ServerContext applicationContext)
     {
-        Task.Run(() => StartAsync()).GetAwaiter().GetResult();
+        var app = Configure();
+        if (app == default)
+        {
+            return;
+        }
+
+        var startedSignal = new ManualResetEventSlim(false);
+        Exception? startException = default;
+        using var applicationStartedRegistration = app.Lifetime.ApplicationStarted.Register(startedSignal.Set);
+
+        _app = app;
+        _hostThread = new Thread(
+            () =>
+            {
+                try
+                {
+                    app.Run();
+                }
+                catch (Exception exception)
+                {
+                    startException = exception;
+                    ApplicationContext.Context.Value?.Logger.LogError(exception, "Error starting API service");
+                    startedSignal.Set();
+                }
+            }
+        )
+        {
+            IsBackground = true,
+            Name = nameof(ApiService),
+        };
+
+        _hostThread.Start();
+        if (!startedSignal.Wait(StartTimeout))
+        {
+            app.Lifetime.StopApplication();
+            throw new TimeoutException($"Timed out starting API service after {StartTimeout.TotalSeconds:0} seconds.");
+        }
+
+        if (startException != default)
+        {
+            throw new InvalidOperationException("API service failed to start.", startException);
+        }
     }
 
     protected override void TaskStop(ServerContext applicationContext)
     {
-        Task.Run(() => StopAsync()).GetAwaiter().GetResult();
+        var app = _app;
+        var hostThread = _hostThread;
+        _app = default;
+        _hostThread = default;
+
+        if (app == default)
+        {
+            return;
+        }
+
+        try
+        {
+            app.Lifetime.StopApplication();
+        }
+        catch (Exception exception)
+        {
+            ApplicationContext.Context.Value?.Logger.LogError(exception, "Error stopping API service");
+        }
+
+        if ((hostThread?.IsAlive ?? false) && !hostThread.Join(StopTimeout))
+        {
+            ApplicationContext.Context.Value?.Logger.LogWarning(
+                "Timed out waiting for API service to stop after {TimeoutSeconds} seconds.",
+                StopTimeout.TotalSeconds
+            );
+        }
+
     }
 
     public ApiConfiguration Configuration =>
